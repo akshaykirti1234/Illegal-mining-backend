@@ -11,8 +11,6 @@ venv/
 # Ignore VS Code settings
 .vscode/
 
-# Ignore dependencies
-requirements.txt
 
 # Ignore log files
 *.log
