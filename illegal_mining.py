@@ -3,6 +3,8 @@ import psycopg2
 from psycopg2 import pool
 from fastapi.middleware.cors import CORSMiddleware
 import json
+from typing import List
+from pydantic import BaseModel
 
 app = FastAPI(debug=True)
 
@@ -58,6 +60,53 @@ async def get_joda_geojson():
 
     finally:
         # Release the connection back to the pool
+        if connection:
+            cursor.close()
+            db_pool.putconn(connection)
+
+# Pydantic Model for KML Data
+class KMLData(BaseModel):
+    gid: int
+    layer: str
+
+# Get getAllLessees Data
+@app.get("/getAllLessees")
+async def getAllLessees():
+    """Fetches gid, layer, and extent from kml_joda_lessee"""
+    try:
+        connection = db_pool.getconn()
+        cursor = connection.cursor()
+
+        query = """
+        SELECT gid, layer, ST_Extent(geom) AS extent 
+        FROM kml_joda_lessee 
+        GROUP BY gid, layer
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No records found")
+
+        results = []
+        for row in rows:
+            gid, layer, extent = row
+            extent_dict = None
+
+            if extent:
+                extent_values = extent.replace("BOX(", "").replace(")", "").split(",")
+                minx, miny = map(float, extent_values[0].split())
+                maxx, maxy = map(float, extent_values[1].split())
+                extent_dict = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
+
+            results.append({"gid": gid, "layer": layer, "extent": extent_dict})
+
+        return results
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
         if connection:
             cursor.close()
             db_pool.putconn(connection)
